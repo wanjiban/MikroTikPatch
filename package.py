@@ -1,36 +1,34 @@
 """
-Package Management Module
+包管理模块
 
-This module provides utilities for managing Python package dependencies
-during the patching process. It supports:
+本模块提供在修补过程中管理 Python 包依赖项的实用工具。支持的功
 
-- Checking if a package is installed
-- Installing packages with pip
-- Installing specific versions
-- Using custom PyPI indexes
+- 检查包是否已安装
+- 使用 pip 安装包
+- 安装特定版本
+- 使用自定义 PyPI 索引
 
-The functions are designed to work within the patching workflow,
-ensuring required dependencies (like pefile, pyelftools) are available.
+这些函数设计用于在修补工作流中工作，确保所需依赖项（如 pefile、pyelftools）可用。
 """
 
 
 def install_package(package, version="upgrade", index_url='https://mirrors.aliyun.com/pypi/simple/'):
     """
-    Installs or upgrades a Python package using pip.
+    使用 pip 安装或升级 Python 包。
 
-    This function handles both fresh installations and version upgrades.
-    It uses the current Python interpreter's pip module.
+    此函数处理新安装和版本升级。
+    它使用当前 Python 解释器的 pip 模块。
 
-    Args:
-        package: Name of the package to install.
-        version: Version specifier. Use "upgrade" (default) to install latest
-                or specify a version like ">=1.0.0".
-        index_url: PyPI index URL (default: Aliyun mirror).
+    参数:
+        package: 要安装的包名称
+        version: 版本说明符。使用 "upgrade"（默认）安装最新版本
+                或指定版本如 ">=1.0.0"
+        index_url: PyPI 索引 URL（默认为阿里云镜像）
 
-    Returns:
-        int: Return code from pip (0 for success, non-zero for failure).
+    返回:
+        int: pip 返回码（0 表示成功，非零表示失败）
 
-    Example:
+    示例:
         >>> install_package('pefile')
         >>> install_package('pyelftools', '>=1.6.0')
     """
@@ -61,15 +59,15 @@ def install_package(package, version="upgrade", index_url='https://mirrors.aliyu
 
 def check_package(package):
     """
-    Checks if a Python package is installed.
+    检查是否安装了 Python 包。
 
-    Args:
-        package: Name of the package to check.
+    参数:
+        package: 要检查的包名称
 
-    Returns:
-        bool: True if package is installed, False otherwise.
+    返回:
+        bool: 如果包已安装返回 True，否则返回 False
 
-    Example:
+    示例:
         >>> check_package('pefile')
         True
         >>> check_package('nonexistent')
@@ -85,17 +83,17 @@ def check_package(package):
 
 def check_install_package(packages):
     """
-    Checks and installs multiple packages if missing.
+    检查并在缺少时安装多个包。
 
-    This is a convenience function that checks each package in the list
-    and installs any that are not currently installed.
+    这是一个便利函数，检查列表中每个包的状态，
+    并安装任何当前未安装的包。
 
-    Args:
-        packages: List of package names to check and install.
+    参数:
+        packages: 要检查和安装的包名称列表
 
-    Example:
+    示例:
         >>> check_install_package(['pefile', 'pyelftools'])
-        # Installs any missing packages
+        # 安装任何缺少的包
     """
     for package in packages:
         if not check_package(package):

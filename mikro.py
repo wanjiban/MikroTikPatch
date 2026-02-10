@@ -1,14 +1,14 @@
 """
-MikroTik RouterOS License and Cryptographic Operations Module
+MikroTik RouterOS 许可证和加密操作模块
 
-This module provides cryptographic functions for MikroTik RouterOS including:
-- Software ID encoding/decoding
-- Custom license payload encoding/decoding (MIKRO_SHA256_K based)
-- Base64 encoding/decoding with MikroTik's custom alphabet
-- EdDSA (Ed25519) signing and verification
-- KCdsa (Curve25519) signing and verification
+本模块提供 MikroTik RouterOS 的加密功能，包括：
+- 软件 ID 编码/解码
+- 自定义许可证载荷编码/解码（基于 MIKRO_SHA256_K）
+- 使用 MikroTik 自定义字母表的 Base64 编码/解码
+- EdDSA (Ed25519) 签名和验证
+- KCdsa (Curve25519) 签名和验证
 
-These functions are used for MikroTik license generation and verification operations.
+这些函数用于 MikroTik 许可证生成和验证操作。
 """
 
 import random
@@ -42,18 +42,18 @@ MIKRO_SHA256_K = (
 
 def mikro_softwareid_decode(software_id: str) -> int:
     """
-    Decodes a MikroTik software ID string into its numeric representation.
+    将 MikroTik 软件 ID 字符串解码为其数值表示。
 
-    The software ID is encoded using a custom 32-character alphabet (SOFTWARE_ID_CHARACTER_TABLE).
-    This is the inverse operation of mikro_softwareid_encode().
+    软件 ID 使用自定义的 32 字符字母表（SOFTWARE_ID_CHARACTER_TABLE）编码。
+    这是 mikro_softwareid_encode() 的逆操作。
 
-    Args:
-        software_id: The software ID string to decode (e.g., 'TN0BYX18-5HZ4IA67')
+    参数:
+        software_id: 要解码的软件 ID 字符串（例如：'TN0BYX18-5HZ4IA67'）
 
-    Returns:
-        int: The decoded numeric software ID value.
+    返回:
+        int: 解码后的数值软件 ID
 
-    Example:
+    示例:
         >>> mikro_softwareid_decode('TN0BYX18')
         1234567890
     """
@@ -68,19 +68,19 @@ def mikro_softwareid_decode(software_id: str) -> int:
 
 def mikro_softwareid_encode(id: int) -> str:
     """
-    Encodes a numeric ID into a MikroTik software ID string.
+    将数值 ID 编码为 MikroTik 软件 ID 字符串。
 
-    The software ID is encoded using a custom 32-character alphabet (SOFTWARE_ID_CHARACTER_TABLE).
-    The output format includes a hyphen after the 4th character for readability.
-    This is the inverse operation of mikro_softwareid_decode().
+    软件 ID 使用自定义的 32 字符字母表（SOFTWARE_ID_CHARACTER_TABLE）编码。
+    输出格式在第 4 个字符后包含连字符以提高可读性。
+    这是 mikro_softwareid_decode() 的逆操作。
 
-    Args:
-        id: The numeric ID to encode.
+    参数:
+        id: 要编码的数值 ID
 
-    Returns:
-        str: The encoded software ID string with hyphen separator.
+    返回:
+        str: 编码后的软件 ID 字符串（带连字符分隔符）
 
-    Example:
+    示例:
         >>> mikro_softwareid_encode(1234567890)
         'TN0B-XXXX'
     """
@@ -96,46 +96,46 @@ def mikro_softwareid_encode(id: int) -> str:
 
 def to32bits(v):
     """
-    Ensures a value is constrained to 32 bits (unsigned).
+    确保值限制在 32 位（无符号）。
 
-    Args:
-        v: The integer value to constrain.
+    参数:
+        v: 要限制的整数值
 
-    Returns:
-        int: The value modulo 2^32.
+    返回:
+        int: 值模 2^32
     """
     return (v + (1 << 32)) % (1 << 32)
 
 
 def rotl(n, d):
     """
-    Performs a 32-bit left rotation (Rotate Left).
+    执行 32 位左循环移位（Rotate Left）。
 
-    Args:
-        n: The value to rotate.
-        d: The number of bits to rotate left.
+    参数:
+        n: 要移位的值
+        d: 左移位数
 
-    Returns:
-        int: The rotated 32-bit value.
+    返回:
+        int: 循环移位后的 32 位值
     """
     return (n << d) | (n >> (32 - d))
 
 
 def mikro_encode(s: bytes) -> bytes:
     """
-    Encodes license payload data using MikroTik's custom MIKRO_SHA256_K based algorithm.
+    使用 MikroTik 自定义 MIKRO_SHA256_K 算法编码许可证载荷数据。
 
-    This function applies a series of ROTL operations and XOR operations using
-    the MIKRO_SHA256_K constants to obfuscate the license payload data.
+    此函数使用 MIKRO_SHA256_K 常量应用一系列 ROTL 操作和 XOR 操作
+    来混淆许可证载荷数据。
 
-    Args:
-        s: The raw license payload bytes to encode.
+    参数:
+        s: 要编码的原始许可证载荷字节
 
-    Returns:
-        bytes: The encoded license payload (same length as input).
+    返回:
+        bytes: 编码后的许可证载荷（长度与输入相同）
 
-    Note:
-        This is a proprietary MikroTik encoding algorithm used in license generation.
+    注意:
+        这是 MikroTik 专有的编码算法，用于许可证生成。
     """
     s = list(struct.unpack('>' + 'I' * (len(s) // 4), s))
     for i in reversed(range(16)):
@@ -159,19 +159,19 @@ def mikro_encode(s: bytes) -> bytes:
 
 def mikro_decode(s: bytes) -> bytes:
     """
-    Decodes license payload data encoded with mikro_encode().
+    解码使用 mikro_encode() 编码的许可证载荷数据。
 
-    This function reverses the encoding process by applying the inverse operations
-    of mikro_encode() using the same MIKRO_SHA256_K constants.
+    此函数通过使用相同的 MIKRO_SHA256_K 常量应用 mikro_encode() 的逆操作
+    来反转编码过程。
 
-    Args:
-        s: The encoded license payload bytes to decode.
+    参数:
+        s: 要解码的编码许可证载荷字节
 
-    Returns:
-        bytes: The decoded license payload (same length as input).
+    返回:
+        bytes: 解码后的许可证载荷（长度与输入相同）
 
-    Note:
-        This is the inverse operation of mikro_encode().
+    注意:
+        这是 mikro_encode() 的逆操作。
     """
     s = list(struct.unpack('>'+'I'*(len(s) // 4), s))
     for i in range(16):
@@ -196,17 +196,17 @@ def mikro_decode(s: bytes) -> bytes:
 
 def mikro_base64_encode(data: bytes, pad=False) -> str:
     """
-    Encodes bytes using MikroTik's custom base64 alphabet.
+    使用 MikroTik 自定义字母表编码字节。
 
-    This is similar to standard base64 encoding but uses MikroTik's custom
-    character table (MIKRO_BASE64_CHARACTER_TABLE) instead of the standard one.
+    这类似于标准 base64 编码，但使用 MikroTik 的自定义字符表
+   （MIKRO_BASE64_CHARACTER_TABLE）而非标准字符表。
 
-    Args:
-        data: The bytes to encode.
-        pad: Whether to add padding characters ('=') at the end.
+    参数:
+        data: 要编码的字节
+        pad: 是否在末尾添加填充字符（'='）
 
-    Returns:
-        str: The encoded string.
+    返回:
+        str: 编码后的字符串
     """
     encoded = ''
     left = 0
@@ -237,13 +237,13 @@ def mikro_base64_encode(data: bytes, pad=False) -> str:
 
 def mikro_base64_decode(data: str) -> bytes:
     """
-    Decodes a string encoded with mikro_base64_encode().
+    解码使用 mikro_base64_encode() 编码的字符串。
 
-    Args:
-        data: The base64-encoded string to decode (padding '=' optional).
+    参数:
+        data: 要解码的 base64 编码字符串（填充符 '=' 可选）
 
-    Returns:
-        bytes: The decoded byte data.
+    返回:
+        bytes: 解码后的字节数据
     """
     ret = b""
     data = data.replace("=", "").encode()
@@ -262,10 +262,10 @@ def mikro_base64_decode(data: str) -> bytes:
 
 class MikroSHA256(SHA256):
     """
-    Custom SHA256 implementation using MikroTik's MIKRO_SHA256_K constants.
+    使用 MikroTik 自定义 MIKRO_SHA256_K 常量的 SHA256 实现。
 
-    This class extends the base SHA256 implementation with MikroTik-specific
-    constants for use in license generation and verification.
+    此类使用 MikroTik 特定的常量扩展了基础 SHA256 实现，
+    用于许可证生成和验证。
     """
     K = MIKRO_SHA256_K
     INITIAL_STATE = SHA256.State(
@@ -276,27 +276,27 @@ class MikroSHA256(SHA256):
 
 def mikro_sha256(data: bytes) -> bytes:
     """
-    Computes SHA256 hash using MikroTik's custom parameters.
+    使用 MikroTik 自定义参数计算 SHA256 哈希。
 
-    Args:
-        data: The bytes to hash.
+    参数:
+        data: 要哈希的字节
 
-    Returns:
-        bytes: The 32-byte SHA256 digest.
+    返回:
+        bytes: 32 字节的 SHA256 摘要
     """
     return MikroSHA256(data).digest()
 
 
 def mikro_eddsa_sign(data: bytes, private_key: bytes) -> bytes:
     """
-    Signs data using EdDSA (Ed25519) algorithm.
+    使用 EdDSA (Ed25519) 算法签名数据。
 
-    Args:
-        data: The bytes to sign.
-        private_key: The 32-byte Ed25519 private key.
+    参数:
+        data: 要签名的字节
+        private_key: 32 字节 Ed25519 私钥
 
-    Returns:
-        bytes: The 64-byte EdDSA signature.
+    返回:
+        bytes: 64 字节 EdDSA 签名
     """
     assert(isinstance(data, bytes))
     assert(isinstance(private_key, bytes))
@@ -307,15 +307,15 @@ def mikro_eddsa_sign(data: bytes, private_key: bytes) -> bytes:
 
 def mikro_eddsa_verify(data: bytes, signature: bytes, public_key: bytes) -> bool:
     """
-    Verifies an EdDSA (Ed25519) signature.
+    验证 EdDSA (Ed25519) 签名。
 
-    Args:
-        data: The original data that was signed.
-        signature: The 64-byte EdDSA signature to verify.
-        public_key: The 32-byte Ed25519 public key.
+    参数:
+        data: 原始签名数据
+        signature: 64 字节 EdDSA 签名
+        public_key: 32 字节 Ed25519 公钥
 
-    Returns:
-        bool: True if signature is valid, False otherwise.
+    返回:
+        bool: 签名有效返回 True，否则返回 False
     """
     assert(isinstance(data, bytes))
     assert(isinstance(signature, bytes))
@@ -328,17 +328,17 @@ def mikro_eddsa_verify(data: bytes, signature: bytes, public_key: bytes) -> bool
 
 def mikro_kcdsa_sign(data: bytes, private_key: bytes) -> bytes:
     """
-    Signs data using KCdsa (Kyber-modified Curve25519 DSA) algorithm.
+    使用 KCdsa（Kyber 修改的 Curve25519 DSA）算法签名数据。
 
-    KCdsa is a custom signature scheme used by MikroTik, combining
-    Curve25519 with SHA256-based nonce derivation.
+    KCdsa 是 MikroTik 使用的自定义签名方案，结合了
+    Curve25519 和基于 SHA256 的随机数派生。
 
-    Args:
-        data: The bytes to sign.
-        private_key: The 32-byte Curve25519 private key.
+    参数:
+        data: 要签名的字节
+        private_key: 32 字节 Curve25519 私钥
 
-    Returns:
-        bytes: The 48-byte KCdsa signature (16-byte nonce hash + 32-byte signature).
+    返回:
+        bytes: 48 字节 KCdsa 签名（16 字节随机数哈希 + 32 字节签名）
     """
     assert(isinstance(data, bytes))
     assert(isinstance(private_key, bytes))
@@ -365,15 +365,15 @@ def mikro_kcdsa_sign(data: bytes, private_key: bytes) -> bytes:
 
 def mikro_kcdsa_verify(data: bytes, signature: bytes, public_key: bytes) -> bool:
     """
-    Verifies a KCdsa (Kyber-modified Curve25519 DSA) signature.
+    验证 KCdsa（Kyber 修改的 Curve25519 DSA）签名。
 
-    Args:
-        data: The original data that was signed.
-        signature: The 48-byte KCdsa signature.
-        public_key: The 32-byte Curve25519 public key.
+    参数:
+        data: 原始签名数据
+        signature: 48 字节 KCdsa 签名
+        public_key: 32 字节 Curve25519 公钥
 
-    Returns:
-        bool: True if signature is valid, False otherwise.
+    返回:
+        bool: 签名有效返回 True，否则返回 False
     """
     assert(isinstance(data, bytes))
     assert(isinstance(signature, bytes))

@@ -1,24 +1,24 @@
 """
-MikroTik RouterOS Patch Module
+MikroTik RouterOS 补丁模块
 
-This module provides functions for patching MikroTik RouterOS firmware images
-by replacing public keys and modifying various components:
+本模块提供用于通过替换公钥和修改各种组件来修补
+MikroTik RouterOS 固件镜像的函数。
 
-Features:
-- Replace public keys in kernel images (bzImage, ELF, initrd)
-- Patch bootloaders in PE and ELF formats
-- Modify SquashFS filesystems
-- Replace URLs for license, upgrade, cloud, and renew endpoints
-- Patch netinstall images
-- Patch block devices directly
+功能：
+- 替换内核镜像中的公钥（bzImage、ELF、initrd）
+- 修补 PE 和 ELF 格式的引导加载程序
+- 修改 SquashFS 文件系统
+- 替换许可证、升级、云和续订端点的 URL
+- 修补 netinstall 镜像
+- 直接修补块设备
 
-The patching process typically involves:
-1. Locating the public key or URL in the binary data
-2. Replacing it with a custom key/URL
-3. Resigning the NPK package if applicable
+修补过程通常包括：
+1. 在二进制数据中定位公钥或 URL
+2. 使用自定义密钥/URL 替换它
+3. 重新签署 NPK 包（如果适用）
 
-This module is used by GitHub Actions workflows to automatically generate
-patched RouterOS images for various architectures (x86, ARM, MIPS, etc.).
+此模块由 GitHub Actions 工作流使用，用于自动生成
+各种架构（x86、ARM、MIPS 等）的修补 RouterOS 镜像。
 """
 
 import subprocess
@@ -31,20 +31,19 @@ from npk import NovaPackage, NpkPartID, NpkFileContainer
 
 def replace_chunks(old_chunks, new_chunks, data, name):
     """
-    Replaces multiple chunks of data in a byte string using regex pattern matching.
+    使用正则表达式模式匹配替换字节字符串中的多个数据块。
 
-    This function is used for replacing public keys that are split into multiple
-    chunks with variable-length separators. It preserves the separator bytes
-    between chunks while replacing the actual key data.
+    此函数用于替换分成多个块且带有可变长度分隔符的公钥。
+    它在替换实际密钥数据的同时保留块之间的分隔符字节。
 
-    Args:
-        old_chunks: List of byte strings representing the original data chunks.
-        new_chunks: List of byte strings representing the replacement data chunks.
-        data: The full byte string to search and replace in.
-        name: Name identifier for logging purposes.
+    参数:
+        old_chunks: 表示原始数据块的字节字符串列表
+        new_chunks: 表示替换数据块的字节字符串列表
+        data: 要搜索和替换的完整字节字符串
+        name: 用于日志记录的名称标识符
 
-    Returns:
-        bytes: Modified data with old chunks replaced by new chunks.
+    返回:
+        bytes: 用新块替换旧块后的修改数据
     """
     pattern_parts = [re.escape(chunk) + b'(.{0,6})' for chunk in old_chunks[:-1]]
     pattern_parts.append(re.escape(old_chunks[-1]))
@@ -52,39 +51,39 @@ def replace_chunks(old_chunks, new_chunks, data, name):
     pattern = re.compile(pattern_bytes, flags=re.DOTALL)
 
     def replace_match(match):
-        """Replacement function that preserves separator bytes."""
+        """保留分隔符字节的替换函数。"""
         replaced = b''.join([new_chunks[i] + match.group(i+1) for i in range(len(new_chunks) - 1)])
         replaced += new_chunks[-1]
-        print(f'{name} public key patched {b"".join(old_chunks)[:16].hex().upper()}...')
+        print(f'{name} 公钥已修补 {b"".join(old_chunks)[:16].hex().upper()}...')
         return replaced
     return re.sub(pattern, replace_match, data)
 
 
 def replace_key(old, new, data, name=''):
     """
-    Replaces a public key in binary data with support for multiple key formats.
+    替换二进制数据中的公钥，支持多种密钥格式。
 
-    This function handles various key representation formats:
-    1. Sequential 4-byte chunks
-    2. Shuffled byte order (key_map permutation)
-    3. ARM32 big-endian chunks
-    4. ARM64 compressed format
+    此函数处理各种密钥表示格式：
+    1. 连续的 4 字节块
+    2. 洗牌的字节顺序（key_map 置换）
+    3. ARM32 大端块
+    4. ARM64 压缩格式
 
-    Args:
-        old: The original public key bytes to replace.
-        new: The replacement public key bytes.
-        data: The binary data to search and modify.
-        name: Optional name identifier for logging.
+    参数:
+        old: 要替换的原始公钥字节
+        new: 替换后的公钥字节
+        data: 要搜索和修改的二进制数据
+        name: 用于日志记录的可选名称标识符
 
-    Returns:
-        bytes: Modified data with the key replaced.
+    返回:
+        bytes: 替换密钥后的修改数据
     """
     old_chunks = [old[i:i+4] for i in range(0, len(old), 4)]
     new_chunks = [new[i:i+4] for i in range(0, len(new), 4)]
     data = replace_chunks(old_chunks, new_chunks, data, name)
 
     key_map = [28, 19, 25, 16, 14, 3, 24, 15, 22, 8, 6, 17, 11, 7, 9, 23,
-              18, 13, 10, 0, 26, 21, 2, 5, 20, 30, 31, 4, 27, 29, 1, 12]
+               18, 13, 10, 0, 26, 21, 2, 5, 20, 30, 31, 4, 27, 29, 1, 12]
     old_chunks = [bytes([old[i]]) for i in key_map]
     new_chunks = [bytes([new[i]]) for i in key_map]
     data = replace_chunks(old_chunks, new_chunks, data, name)
@@ -99,7 +98,7 @@ def replace_key(old, new, data, name=''):
         new_bytes = (new_chunks[4] + new_chunks[5] + new_chunks[2] + new_chunks[0] +
                      new_chunks[1] + new_chunks[6] + new_chunks[7])
         if old_bytes in data:
-            print(f'{name} public key patched {old[:16].hex().upper()}...')
+            print(f'{name} 公钥已修补 {old[:16].hex().upper()}...')
             data = data.replace(old_bytes, new_bytes)
             old_codes = [bytes.fromhex('793583E2'), bytes.fromhex('FD3A83E2'),
                          bytes.fromhex('193D83E2')]
@@ -108,7 +107,7 @@ def replace_key(old, new, data, name=''):
             data = replace_chunks(old_codes, new_codes, data, name)
         else:
             def conver_chunks(data: bytes):
-                """Converts bytes to ARM-specific 32-bit little-endian words."""
+                """将字节转换为 ARM 特定的 32 位小端字。"""
                 ret = [
                     (data[2] << 16) | (data[1] << 8) | data[0] | ((data[3] << 24) & 0x03000000),
                     (data[3] >> 2) | (data[4] << 6) | (data[5] << 14) | ((data[6] << 22) & 0x1C00000),
@@ -127,7 +126,7 @@ def replace_key(old, new, data, name=''):
             old_bytes = b''.join([v for i, v in enumerate(old_chunks) if i != 8])
             new_bytes = b''.join([v for i, v in enumerate(new_chunks) if i != 8])
             if old_bytes in data:
-                print(f'{name} public key patched {old[:16].hex().upper()}...')
+                print(f'{name} 公钥已修补 {old[:16].hex().upper()}...')
                 data = data.replace(old_bytes, new_bytes)
                 old_codes = [bytes.fromhex('713783E2'), bytes.fromhex('223A83E2'),
                              bytes.fromhex('8D3F83E2')]
@@ -140,26 +139,26 @@ def replace_key(old, new, data, name=''):
 
 def patch_bzimage(data: bytes, key_dict: dict) -> bytes:
     """
-    Patches a bzImage (x86_64 EFI kernel) by replacing public keys in the initramfs.
+    通过替换 initramfs 中的公钥来修补 bzImage（x86_64 EFI 内核）。
 
-    The bzImage format used by RouterOS contains:
-    1. PE/EFI header
-    2. XZ-compressed payload containing:
-    - Linux kernel (vmlinux)
-    - CPIO archive (initramfs) with public keys
+    RouterOS 使用的 bzImage 格式包含：
+    1. PE/EFI 头
+    2. 包含以下内容的 XZ 压缩有效载荷：
+       - Linux 内核（vmlinux）
+       - 带有公钥的 CPIO 存档（initramfs）
 
-    This function:
-    1. Extracts the XZ-compressed payload
-    2. Locates the CPIO initramfs archive
-    3. Replaces public keys within the initramfs
-    4. Recompresses and repacks the bzImage
+    此函数：
+    1. 提取 XZ 压缩的有效载荷
+    2. 定位 CPIO initramfs 存档
+    3. 替换 initramfs 中的公钥
+    4. 重新压缩并打包 bzImage
 
-    Args:
-        data: Raw bzImage bytes.
-        key_dict: Dictionary mapping old public keys to new public keys.
+    参数:
+        data: 原始 bzImage 字节
+        key_dict: 将旧公钥映射到新公钥的字典
 
-    Returns:
-        bytes: Patched bzImage bytes.
+    返回:
+        bytes: 修补后的 bzImage 字节
     """
     PE_TEXT_SECTION_OFFSET = 414
     HEADER_PAYLOAD_OFFSET = 584
@@ -173,7 +172,7 @@ def patch_bzimage(data: bytes, key_dict: dict) -> bytes:
 
     vmlinux_xz = data[payload_offset:payload_offset + payload_length]
     vmlinux = lzma.decompress(vmlinux_xz)
-    assert z_output_len == len(vmlinux), 'vmlinux size is not equal to expected'
+    assert z_output_len == len(vmlinux), 'vmlinux 大小与预期不符'
 
     CPIO_HEADER_MAGIC = b'07070100'
     CPIO_FOOTER_MAGIC = b'TRAILER!!!\x00\x00\x00\x00'
@@ -197,7 +196,7 @@ def patch_bzimage(data: bytes, key_dict: dict) -> bytes:
     ])
 
     new_payload_length = len(new_vmlinux_xz)
-    assert new_payload_length <= payload_length, 'new vmlinux.xz size is too big'
+    assert new_payload_length <= payload_length, '新的 vmlinux.xz 大小太大'
     new_payload_length = new_payload_length + 4
 
     new_data = bytearray(data)
@@ -212,18 +211,18 @@ def patch_bzimage(data: bytes, key_dict: dict) -> bytes:
 
 def patch_block(dev: str, file: str, key_dict):
     """
-    Patches a file within a block device by modifying individual blocks.
+    通过修改单个块来修补块设备中的文件。
 
-    This function uses debugfs to:
-    1. Locate the file's blocks on the device
-    2. Read the file data
-    3. Apply kernel patching
-    4. Write modified data back to the original block locations
+    此函数使用 debugfs 来：
+    1. 定位文件在设备上的块
+    2. 读取文件数据
+    3. 应用内核修补
+    4. 将修改后的数据写回原始块位置
 
-    Args:
-        dev: Block device path (e.g., '/dev/nbd0p1').
-        file: File path within the filesystem (e.g., 'boot/initrd.rgz').
-        key_dict: Dictionary mapping old public keys to new public keys.
+    参数:
+        dev: 块设备路径（例如：'/dev/nbd0p1'）
+        file: 文件系统内的文件路径（例如：'boot/initrd.rgz'）
+        key_dict: 将旧公钥映射到新公钥的字典
     """
     BLOCK_SIZE = 4096
 
@@ -263,20 +262,20 @@ def patch_block(dev: str, file: str, key_dict):
 
 def patch_initrd_xz(initrd_xz: bytes, key_dict: dict, ljust=True) -> bytes:
     """
-    Patches an XZ-compressed initramfs/initrd image.
+    修补 XZ 压缩的 initramfs/initrd 镜像。
 
-    This function:
-    1. Decompresses the initrd XZ data
-    2. Replaces all public keys in the file contents
-    3. Recompresses with adjusted compression level if needed
+    此函数：
+    1. 解压缩 initrd XZ 数据
+    2. 替换文件内容中的所有公钥
+    3. 根据需要调整压缩级别后重新压缩
 
-    Args:
-        initrd_xz: Raw XZ-compressed initrd bytes.
-        key_dict: Dictionary mapping old public keys to new public keys.
-        ljust: If True, pads output to original size (default True).
+    参数:
+        initrd_xz: 原始 XZ 压缩的 initrd 字节
+        key_dict: 将旧公钥映射到新公钥的字典
+        ljust: 如果为 True，将输出填充到原始大小（默认为 True）
 
-    Returns:
-        bytes: Patched XZ-compressed initrd data.
+    返回:
+        bytes: 修补后的 XZ 压缩 initrd 数据
     """
     initrd = lzma.decompress(initrd_xz)
     new_initrd = initrd
@@ -286,27 +285,27 @@ def patch_initrd_xz(initrd_xz: bytes, key_dict: dict, ljust=True) -> bytes:
 
     preset = 6
     new_initrd_xz = lzma.compress(new_initrd, check=lzma.CHECK_CRC32,
-                                  filters=[{"id": lzma.FILTER_LZMA2, "preset": preset}])
+                                   filters=[{"id": lzma.FILTER_LZMA2, "preset": preset}])
 
     while len(new_initrd_xz) > len(initrd_xz) and preset < 9:
         print(f'preset:{preset}')
-        print(f'new initrd xz size:{len(new_initrd_xz)}')
-        print(f'old initrd xz size:{len(initrd_xz)}')
+        print(f'新的 initrd xz 大小:{len(new_initrd_xz)}')
+        print(f'旧的 initrd xz 大小:{len(initrd_xz)}')
         preset += 1
         new_initrd_xz = lzma.compress(new_initrd, check=lzma.CHECK_CRC32,
-                                      filters=[{"id": lzma.FILTER_LZMA2, "preset": preset}])
+                                       filters=[{"id": lzma.FILTER_LZMA2, "preset": preset}])
 
     if len(new_initrd_xz) > len(initrd_xz):
         new_initrd_xz = lzma.compress(new_initrd, check=lzma.CHECK_CRC32,
-                                      filters=[{"id": lzma.FILTER_LZMA2, "preset": 9 | lzma.PRESET_EXTREME,
-                                               'dict_size': 32*1024*1024, "lc": 4, "lp": 0, "pb": 0}])
+                                       filters=[{"id": lzma.FILTER_LZMA2, "preset": 9 | lzma.PRESET_EXTREME,
+                                                'dict_size': 32*1024*1024, "lc": 4, "lp": 0, "pb": 0}])
 
     if ljust:
         print(f'preset:{preset}')
-        print(f'new initrd xz size:{len(new_initrd_xz)}')
-        print(f'old initrd xz size:{len(initrd_xz)}')
-        print(f'ljust size:{len(initrd_xz) - len(new_initrd_xz)}')
-        assert len(new_initrd_xz) <= len(initrd_xz), 'new initrd xz size is too big'
+        print(f'新的 initrd xz 大小:{len(new_initrd_xz)}')
+        print(f'旧的 initrd xz 大小:{len(initrd_xz)}')
+        print(f'ljust 大小:{len(initrd_xz) - len(new_initrd_xz)}')
+        assert len(new_initrd_xz) <= len(initrd_xz), '新的 initrd xz 大小太大'
         new_initrd_xz = new_initrd_xz.ljust(len(initrd_xz), b'\0')
 
     return new_initrd_xz
@@ -314,16 +313,16 @@ def patch_initrd_xz(initrd_xz: bytes, key_dict: dict, ljust=True) -> bytes:
 
 def find_7zXZ_data(data: bytes) -> bytes:
     """
-    Locates embedded 7zXZ (LZMA) data within a larger binary.
+    在较大的二进制文件中定位嵌入的 7zXZ（LZMA）数据。
 
-    This function searches for the 7zXZ magic bytes and finds the corresponding
-    end marker to extract the full LZMA-compressed data block.
+    此函数搜索 7zXZ 魔数字节并找到相应的
+    结束标记以提取完整的 LZMA 压缩数据块。
 
-    Args:
-        data: Binary data that may contain 7zXZ data.
+    参数:
+        data: 可能包含 7zXZ 数据的二进制数据
 
-    Returns:
-        bytes: The extracted 7zXZ data block.
+    返回:
+        bytes: 提取的 7zXZ 数据块
     """
     offset1 = 0
     _data = data
@@ -338,25 +337,25 @@ def find_7zXZ_data(data: bytes) -> bytes:
         offset2 = offset2 + _data.index(b'\x00\x00\x00\x00\x01\x59\x5A') + 7
         _data = _data[offset2:]
 
-    print(f'found 7zXZ data offset:{offset1} size:{offset2 - offset1}')
+    print(f'找到 7zXZ 数据偏移:{offset1} 大小:{offset2 - offset1}')
     return data[offset1:offset2]
 
 
 def patch_elf(data: bytes, key_dict: dict) -> bytes:
     """
-    Patches an ELF binary containing embedded initrd.
+    修补包含嵌入 initrd 的 ELF 二进制文件。
 
-    This function:
-    1. Finds the 7zXZ initrd data within the ELF
-    2. Patches the initrd
-    3. Returns the modified ELF binary
+    此函数：
+    1. 在 ELF 中查找 7zXZ initrd 数据
+    2. 修补 initrd
+    3. 返回修改后的 ELF 二进制文件
 
-    Args:
-        data: Raw ELF binary bytes.
-        key_dict: Dictionary mapping old public keys to new public keys.
+    参数:
+        data: 原始 ELF 二进制字节
+        key_dict: 将旧公钥映射到新公钥的字典
 
-    Returns:
-        bytes: Patched ELF binary bytes.
+    返回:
+        bytes: 修补后的 ELF 二进制字节
     """
     initrd_xz = find_7zXZ_data(data)
     new_initrd_xz = patch_initrd_xz(initrd_xz, key_dict)
@@ -365,17 +364,17 @@ def patch_elf(data: bytes, key_dict: dict) -> bytes:
 
 def patch_pe(data: bytes, key_dict: dict) -> bytes:
     """
-    Patches a PE (Windows EFI) binary containing embedded vmlinux.
+    修补包含嵌入 vmlinux 的 PE（Windows EFI）二进制文件。
 
-    The PE file contains an XZ-compressed vmlinux, which itself contains
-    an embedded initrd. This function patches both layers.
+    PE 文件包含 XZ 压缩的 vmlinux，vmlinux 本身包含
+    嵌入的 initrd。此函数修补两层。
 
-    Args:
-        data: Raw PE binary bytes.
-        key_dict: Dictionary mapping old public keys to new public keys.
+    参数:
+        data: 原始 PE 二进制字节
+        key_dict: 将旧公钥映射到新公钥的字典
 
-    Returns:
-        bytes: Patched PE binary bytes.
+    返回:
+        bytes: 修补后的 PE 二进制字节
     """
     vmlinux_xz = find_7zXZ_data(data)
     vmlinux = lzma.decompress(vmlinux_xz)
@@ -388,12 +387,12 @@ def patch_pe(data: bytes, key_dict: dict) -> bytes:
 
     new_vmlinux = vmlinux.replace(initrd_xz, new_initrd_xz)
     new_vmlinux_xz = lzma.compress(new_vmlinux, check=lzma.CHECK_CRC32,
-                                   filters=[{"id": lzma.FILTER_LZMA2, "preset": 9}])
+                                    filters=[{"id": lzma.FILTER_LZMA2, "preset": 9}])
 
-    assert len(new_vmlinux_xz) <= len(vmlinux_xz), 'new vmlinux xz size is too big'
-    print(f'new vmlinux xz size:{len(new_vmlinux_xz)}')
-    print(f'old vmlinux xz size:{len(vmlinux_xz)}')
-    print(f'ljust size:{len(vmlinux_xz) - len(new_vmlinux_xz)}')
+    assert len(new_vmlinux_xz) <= len(vmlinux_xz), '新的 vmlinux xz 大小太大'
+    print(f'新的 vmlinux xz 大小:{len(new_vmlinux_xz)}')
+    print(f'旧的 vmlinux xz 大小:{len(vmlinux_xz)}')
+    print(f'ljust 大小:{len(vmlinux_xz) - len(new_vmlinux_xz)}')
     new_vmlinux_xz = new_vmlinux_xz.ljust(len(vmlinux_xz), b'\0')
     new_data = data.replace(vmlinux_xz, new_vmlinux_xz)
 
@@ -402,18 +401,18 @@ def patch_pe(data: bytes, key_dict: dict) -> bytes:
 
 def patch_netinstall(key_dict: dict, input_file, output_file=None):
     """
-    Patches a RouterOS netinstall executable.
+    修补 RouterOS netinstall 可执行文件。
 
-    Netinstall files are PE executables containing embedded bootloaders
-    for various architectures. This function:
-    1. Extracts embedded bootloaders from resources
-    2. Patches each bootloader
-    3. Updates the PE resources with patched bootloaders
+    Netinstall 文件是包含各种架构嵌入引导加载程序的 PE 可执行文件。
+    此函数：
+    1. 从资源中提取嵌入的引导加载程序
+    2. 修补每个引导加载程序
+    3. 用修补后的引导加载程序更新 PE 资源
 
-    Args:
-        key_dict: Dictionary mapping old public keys to new public keys.
-        input_file: Path to input netinstall PE file.
-        output_file: Optional output file path (defaults to overwriting input).
+    参数:
+        key_dict: 将旧公钥映射到新公钥的字典
+        input_file: 输入 netinstall PE 文件的路径
+        output_file: 可选的输出文件路径（默认为覆盖输入）
     """
     netinstall = open(input_file, 'rb').read()
 
@@ -440,7 +439,7 @@ def patch_netinstall(key_dict: dict, input_file, output_file=None):
                     for sub_resource in resource.directory.entries:
                         if sub_resource.id in ROUTEROS_BOOT:
                             bootloader = ROUTEROS_BOOT[sub_resource.id]
-                            print(f'found {bootloader["arch"]}({sub_resource.id}) bootloader')
+                            print(f'找到 {bootloader["arch"]}({sub_resource.id}) 引导加载程序')
                             rva = sub_resource.directory.entries[0].data.struct.OffsetToData
                             size = sub_resource.directory.entries[0].data.struct.Size
                             data = pe.get_data(rva, size)
@@ -453,9 +452,9 @@ def patch_netinstall(key_dict: dict, input_file, output_file=None):
                                 elif _data[:4] == b'\x7FELF':
                                     new_data = patch_elf(_data, key_dict)
                                 else:
-                                    raise Exception(f'unknown bootloader format {_data[:4].hex().upper()}')
+                                    raise Exception(f'未知的引导加载程序格式 {_data[:4].hex().upper()}')
                             except Exception as e:
-                                print(f'patch {bootloader["arch"]}({sub_resource.id}) bootloader failed {e}')
+                                print(f'修补 {bootloader["arch"]}({sub_resource.id}) 引导加载程序失败 {e}')
                                 new_data = _data
 
                             new_data = struct.pack("<I", _size) + new_data.ljust(len(_data), b'\0')
@@ -482,14 +481,14 @@ def patch_netinstall(key_dict: dict, input_file, output_file=None):
             name_offset, _, _, addr, offset = struct.unpack_from('<IIIII', netinstall[section_offset:])
             name = netinstall[SECTION_NAME_BLOCK + name_offset:].split(b'\0')[0]
             if name == b'.text':
-                print(f'found .text section at {hex(offset)} addr {hex(addr)}')
+                print(f'找到 .text 节偏移 {hex(offset)} 地址 {hex(addr)}')
                 text_section_addr = addr
                 text_section_offset = offset
                 break
 
         offset = re.search(rb'\x83\x00\x00\x00.{12}\x8A\x00\x00\x00.{12}\x81\x00\x00\x00.{12}',
                            netinstall).start()
-        print(f'found bootloaders offset {hex(offset)}')
+        print(f'找到引导加载程序偏移 {hex(offset)}')
 
         for i in range(10):
             id, name_ptr, data_ptr, data_size = struct.unpack_from(
@@ -497,8 +496,8 @@ def patch_netinstall(key_dict: dict, input_file, output_file=None):
             name = netinstall[text_section_offset + name_ptr - text_section_addr:].split(b'\0')[0]
             data = netinstall[text_section_offset + data_ptr - text_section_addr:
                              text_section_offset + data_ptr - text_section_addr + data_size]
-            print(f'found {name.decode()}({id}) bootloader offset '
-                  f'{hex(text_section_offset + data_ptr - text_section_addr)} size {data_size}')
+            print(f'找到 {name.decode()}({id}) 引导加载程序偏移 '
+                  f'{hex(text_section_offset + data_ptr - text_section_addr)} 大小 {data_size}')
 
             try:
                 if data[:2] == b'MZ':
@@ -506,9 +505,9 @@ def patch_netinstall(key_dict: dict, input_file, output_file=None):
                 elif data[:4] == b'\x7FELF':
                     new_data = patch_elf(data, key_dict)
                 else:
-                    raise Exception(f'unknown bootloader format {data[:4].hex().upper()}')
+                    raise Exception(f'未知的引导加载程序格式 {data[:4].hex().upper()}')
             except Exception as e:
-                print(f'patch {name.decode()}({id}) bootloader failed {e}')
+                print(f'修补 {name.decode()}({id}) 引导加载程序失败 {e}')
                 new_data = data
 
             new_data = new_data.ljust(len(data), b'\0')
@@ -519,47 +518,47 @@ def patch_netinstall(key_dict: dict, input_file, output_file=None):
 
 def patch_kernel(data: bytes, key_dict) -> bytes:
     """
-    Patches a kernel image (detects format automatically).
+    修补内核镜像（自动检测格式）。
 
-    Supports multiple kernel formats:
-    - bzImage (x86_64 EFI): PE header with 'ARM\x64' magic = ARM64
-    - ELF: Standard ELF binary
-    - Raw initrd: XZ-compressed initramfs only
+    支持多种内核格式：
+    - bzImage (x86_64 EFI): 带 'ARM\x64' 魔数的 PE 头 = ARM64
+    - ELF: 标准 ELF 二进制文件
+    - 原始 initrd: 仅 XZ 压缩的 initramfs
 
-    Args:
-        data: Raw kernel bytes.
-        key_dict: Dictionary mapping old public keys to new public keys.
+    参数:
+        data: 原始内核字节
+        key_dict: 将旧公钥映射到新公钥的字典
 
-    Returns:
-        bytes: Patched kernel bytes.
+    返回:
+        bytes: 修补后的内核字节
 
-    Raises:
-        Exception: If kernel format is unrecognized.
+    异常:
+        Exception: 如果内核格式无法识别
     """
     if data[:2] == b'MZ':
-        print('patching EFI Kernel')
+        print('正在修补 EFI 内核')
         if data[56:60] == b'ARM\x64':
-            print('patching arm64')
+            print('正在修补 arm64')
             return patch_elf(data, key_dict)
         else:
-            print('patching x86_64')
+            print('正在修补 x86_64')
             return patch_bzimage(data, key_dict)
     elif data[:4] == b'\x7FELF':
-        print('patching ELF')
+        print('正在修补 ELF')
         return patch_elf(data, key_dict)
     elif data[:5] == b'\xFD7zXZ':
-        print('patching initrd')
+        print('正在修补 initrd')
         return patch_initrd_xz(data, key_dict)
     else:
-        raise Exception('unknown kernel format')
+        raise Exception('无法识别的内核格式')
 
 
 def patch_loader(loader_file):
     """
-    Patches a standalone loader file using the loader patching module.
+    使用加载程序修补模块修补独立的加载程序文件。
 
-    Args:
-        loader_file: Path to the loader file to patch.
+    参数:
+        loader_file: 要修补的加载程序文件的路径
     """
     try:
         from package import check_install_package
@@ -570,22 +569,22 @@ def patch_loader(loader_file):
         do_patch_loader(loader_file, loader_file, arch)
     except ImportError as e:
         print(e)
-        print("loader module import failed. cannot run patch_loader.py")
+        print("加载程序模块导入失败。无法运行 patch_loader.py")
 
 
 def patch_squashfs(path, key_dict):
     """
-    Patches files within an extracted SquashFS filesystem directory.
+    修补提取的 SquashFS 文件系统目录中的文件。
 
-    This function:
-    1. Walks through all files in the directory
-    2. Patches kernel files (BOOTX64.EFI, kernel)
-    3. Replaces public keys in all files
-    4. Replaces URLs for license, upgrade, cloud, and renew endpoints
+    此函数：
+    1. 遍历目录中的所有文件
+    2. 修补内核文件（BOOTX64.EFI、kernel）
+    3. 替换所有文件中的公钥
+    4. 替换许可证、升级、云和续订端点的 URL
 
-    Args:
-        path: Root directory of extracted SquashFS.
-        key_dict: Dictionary mapping old public keys to new public keys.
+    参数:
+        path: 提取的 SquashFS 的根目录
+        key_dict: 将旧公钥映射到新公钥的字典
     """
     for root, dirs, files in os.walk(path):
         for _file in files:
@@ -595,7 +594,7 @@ def patch_squashfs(path, key_dict):
                     patch_loader(file)
                     continue
                 if _file == 'BOOTX64.EFI':
-                    print(f'patch {file} ...')
+                    print(f'修补 {file} ...')
                     data = open(file, 'rb').read()
                     data = patch_kernel(data, key_dict)
                     open(file, 'wb').write(data)
@@ -620,7 +619,7 @@ def patch_squashfs(path, key_dict):
                 data = open(file, 'rb').read()
                 for old_url, new_url in url_dict.items():
                     if old_url in data:
-                        print(f'{file} url patched {old_url.decode()[:7]}...')
+                        print(f'{file} URL 已修补 {old_url.decode()[:7]}...')
                         data = data.replace(old_url, new_url)
                         open(file, 'wb').write(data)
 
@@ -631,19 +630,19 @@ def patch_squashfs(path, key_dict):
                     }
                     for old_url, new_url in url_dict.items():
                         if old_url in data:
-                            print(f'{file} url patched {old_url.decode()[:7]}...')
+                            print(f'{file} URL 已修补 {old_url.decode()[:7]}...')
                             data = data.replace(old_url, new_url)
                             open(file, 'wb').write(data)
 
 
 def run_shell_command(command):
     """
-    Executes a shell command and returns stdout/stderr.
+    执行 shell 命令并返回 stdout/stderr。
 
-    Args:
-        command: Shell command string to execute.
+    参数:
+        command: 要执行的 shell 命令字符串
 
-    Returns:
+    返回:
         tuple: (stdout_bytes, stderr_bytes)
     """
     process = subprocess.run(command, shell=True, check=True,
@@ -653,31 +652,31 @@ def run_shell_command(command):
 
 def patch_npk_package(package, key_dict):
     """
-    Patches an NPK package by modifying its contents.
+    通过修改内容来修补 NPK 包。
 
-    This function:
-    1. Extracts the SquashFS from the package
-    2. Patches files within the SquashFS
-    3. Rebuilds and repacks the SquashFS
-    4. Updates the package with patched SquashFS
+    此函数：
+    1. 从包中提取 SquashFS
+    2. 修补 SquashFS 中的文件
+    3. 重建和重新打包 SquashFS
+    4. 用修补后的 SquashFS 更新包
 
-    Args:
-        package: The NPK package object to patch.
-        key_dict: Dictionary mapping old public keys to new public keys.
+    参数:
+        package: 要修补的 NPK 包对象
+        key_dict: 将旧公钥映射到新公钥的字典
     """
     if package[NpkPartID.NAME_INFO].data.name == 'system':
         file_container = NpkFileContainer.unserialize_from(
             package[NpkPartID.FILE_CONTAINER].data)
         for item in file_container:
             if item.name in [b'boot/EFI/BOOT/BOOTX64.EFI', b'boot/kernel', b'boot/initrd.rgz']:
-                print(f'patch {item.name} ...')
+                print(f'修补 {item.name} ...')
                 item.data = patch_kernel(item.data, key_dict)
         package[NpkPartID.FILE_CONTAINER].data = file_container.serialize()
 
         squashfs_file = 'squashfs-root.sfs'
         extract_dir = 'squashfs-root'
         open(squashfs_file, 'wb').write(package[NpkPartID.SQUASHFS].data)
-        print(f"extract {squashfs_file} ...")
+        print(f"提取 {squashfs_file} ...")
         run_shell_command(f"unsquashfs -d {extract_dir} {squashfs_file}")
 
         patch_squashfs(extract_dir, key_dict)
@@ -687,10 +686,10 @@ def patch_npk_package(package, key_dict):
         run_shell_command(
             f"sudo sed -i '8s#.*#  elseif@live.cn     https://github.com/elseif/MikroTikPatch#' {logo}")
 
-        print(f"pack {extract_dir} ...")
+        print(f"打包 {extract_dir} ...")
         run_shell_command(f"rm -f {squashfs_file}")
         run_shell_command(f"mksquashfs {extract_dir} {squashfs_file} -quiet -comp xz -no-xattrs -b 256k")
-        print(f"clean ...")
+        print(f"清理 ...")
         run_shell_command(f"rm -rf {extract_dir}")
         package[NpkPartID.SQUASHFS].data = open(squashfs_file, 'rb').read()
         run_shell_command(f"rm -f {squashfs_file}")
@@ -698,14 +697,14 @@ def patch_npk_package(package, key_dict):
 
 def patch_npk_file(key_dict, kcdsa_private_key, eddsa_private_key, input_file, output_file=None):
     """
-    Patches and resigns an NPK file.
+    修补和重新签署 NPK 文件。
 
-    Args:
-        key_dict: Dictionary mapping old public keys to new public keys.
-        kcdsa_private_key: KCdsa private key for resigning.
-        eddsa_private_key: EdDSA private key for resigning.
-        input_file: Path to input NPK file.
-        output_file: Optional output file path (defaults to overwriting input).
+    参数:
+        key_dict: 将旧公钥映射到新公钥的字典
+        kcdsa_private_key: 用于重新签署的 KCdsa 私钥
+        eddsa_private_key: 用于重新签署的 EdDSA 私钥
+        input_file: 输入 NPK 文件的路径
+        output_file: 可选的输出文件路径（默认为覆盖输入）
     """
     npk = NovaPackage.load(input_file)
 
@@ -723,24 +722,24 @@ if __name__ == '__main__':
     import argparse
     import os
 
-    parser = argparse.ArgumentParser(description='MikroTik patcher')
+    parser = argparse.ArgumentParser(description='MikroTik 修补工具')
     subparsers = parser.add_subparsers(dest="command")
 
-    npk_parser = subparsers.add_parser('npk', help='patch and sign npk file')
-    npk_parser.add_argument('input', type=str, help='Input file')
-    npk_parser.add_argument('-O', '--output', type=str, help='Output file')
+    npk_parser = subparsers.add_parser('npk', help='修补和签署 npk 文件')
+    npk_parser.add_argument('input', type=str, help='输入文件')
+    npk_parser.add_argument('-O', '--output', type=str, help='输出文件')
 
-    kernel_parser = subparsers.add_parser('kernel', help='patch kernel file')
-    kernel_parser.add_argument('input', type=str, help='Input file')
-    kernel_parser.add_argument('-O', '--output', type=str, help='Output file')
+    kernel_parser = subparsers.add_parser('kernel', help='修补内核文件')
+    kernel_parser.add_argument('input', type=str, help='输入文件')
+    kernel_parser.add_argument('-O', '--output', type=str, help='输出文件')
 
-    block_parser = subparsers.add_parser('block', help='patch block file')
-    block_parser.add_argument('dev', type=str, help='block device')
-    block_parser.add_argument('file', type=str, help='file path')
+    block_parser = subparsers.add_parser('block', help='修补块文件')
+    block_parser.add_argument('dev', type=str, help='块设备')
+    block_parser.add_argument('file', type=str, help='文件路径')
 
-    netinstall_parser = subparsers.add_parser('netinstall', help='patch netinstall file')
-    netinstall_parser.add_argument('input', type=str, help='Input file')
-    netinstall_parser.add_argument('-O', '--output', type=str, help='Output file')
+    netinstall_parser = subparsers.add_parser('netinstall', help='修补 netinstall 文件')
+    netinstall_parser.add_argument('input', type=str, help='输入文件')
+    netinstall_parser.add_argument('-O', '--output', type=str, help='输出文件')
 
     args = parser.parse_args()
 
@@ -755,18 +754,18 @@ if __name__ == '__main__':
     eddsa_private_key = bytes.fromhex(os.environ['CUSTOM_NPK_SIGN_PRIVATE_KEY'])
 
     if args.command == 'npk':
-        print(f'patching {args.input} ...')
+        print(f'正在修补 {args.input} ...')
         patch_npk_file(key_dict, kcdsa_private_key, eddsa_private_key,
                        args.input, args.output)
     elif args.command == 'kernel':
-        print(f'patching {args.input} ...')
+        print(f'正在修补 {args.input} ...')
         data = patch_kernel(open(args.input, 'rb').read(), key_dict)
         open(args.output or args.input, 'wb').write(data)
     elif args.command == 'block':
-        print(f'patching {args.file} in {args.dev} ...')
+        print(f'正在修补 {args.dev} 中的 {args.file} ...')
         patch_block(args.dev, args.file, key_dict)
     elif args.command == 'netinstall':
-        print(f'patching {args.input} ...')
+        print(f'正在修补 {args.input} ...')
         patch_netinstall(key_dict, args.input, args.output)
     else:
         parser.print_help()
